@@ -1,0 +1,360 @@
+<!DOCTYPE html>
+<html style = "height:100%;" lang="en">
+  <head>
+    <meta charset="utf-8">
+    <title>Hackermon</title>
+	<script type="text/javascript" src="http://code.jquery.com/jquery-1.8.0.min.js"></script>   
+	<script type="text/javascript" src="js/jquery.searchabledropdown.js"></script>
+	<script type="text/javascript" src="v0.6/html2canvas.js"></script>
+	<script type="text/javascript" src="v0.6/html2canvas.min.js"></script>
+	<script type="text/javascript" src="v0.6/jquery.plugin.html2canvas.js"></script>
+	<link rel="stylesheet" href="style/style.css" type="text/css" />
+  	<script>
+		var user;
+		var friends;
+		var selected_friends = [{}];
+		var curFriendIndex = 0;
+		var token;
+		var attackPower, defensePower, description, profilePic;
+		var DATA_LENGTH = 250;	// Number of items to look at
+		
+		function fbLogin()
+		{
+			FB.login(function(response) {
+			   if (response.authResponse) {
+			   	token = response.authResponse.accessToken;
+			     //$("#bodySec").html("<select id=\"not_sel\"></select> <select id=\"sel\" multiple=\"multiple\" size='20'></select><button id = \"go_btn\" onclick=\"go_btn()\" style=\"float:left;\">Go</button><div id = \"card1\"style = \"width:335px; height:500px;position:relative;float:left;\"> </div>");
+			     $("#bodySec").html("<select id=\"not_sel\" style='float:left;'></select><select id=\"sel\" multiple=\"multiple\" size='20' style='clear:left;'></select><button id = \"go_btn\" onclick=\"go_btn()\" style='clear:both;'>Go</button>");
+				 
+				 $("#not_sel").searchable({
+				 	maxListSize:9999
+				 });
+				 console.log('Welcome!  Fetching your information.... ');
+				 FB.api('/me', function(response) {
+				   console.log('Good to see you, ' + response.name + '.');
+				   user=response;
+				 });
+				 
+				 FB.api('/me/friends', { limit:9999 }, function(response) {
+				 	friends = response.data;
+				 	friendsLoaded();
+				 });
+				 
+			   } else {
+				 console.log('User cancelled login or did not fully authorize.');
+			   }
+			 }, {scope: 'user_status,friends_status,read_stream'});
+		}
+		function friendsLoaded() {
+			// Load the logged in user first
+			$("#not_sel").append("<option>" + user.name + ", " + user.id + "</option>");
+			for(i = 0; i < friends.length; i++) {
+				$("#not_sel").append("<option>" + friends[i].name + ", "+ friends[i].id + "</option>");
+			}
+			$("#not_sel").change(function() {
+				if($("#sel option").length < 10)
+				{
+					var isAlreadyThere = false;
+					
+					$("#sel option").each(function() {
+						if($(this).val() == $("#not_sel option:selected").val())
+							isAlreadyThere = true;
+					});
+					
+					if(!isAlreadyThere)
+					{
+						$("#sel").append($("#not_sel option:selected").clone());
+					}
+				}
+			});
+			$("#sel").click(function() {
+				$("#sel option:selected").remove();
+			});
+		};
+		
+		function go_btn() {
+			if($("#sel option").length > 0)
+			{
+			//	$("#bodySec").append("<button id='photo' style='float:left;'>Download JPG</button><br/><br/>");
+			//	$("#photo").hide();
+				$("#sel option").each(function(i) {
+					selected_friends[i] = {};
+					selected_friends[i].userName = $(this).val().split(", ")[0];
+					selected_friends[i].uid = $(this).val().split(", ")[1];
+					
+					$("#bodySec").append("<div id='card" + i + "' style='width:335px; height:500px; position:relative; float:left; margin:2px; display:none;'></div>");
+					
+					
+				});
+				
+				$("#sel").fadeOut(1000);
+				$("#not_sel").fadeOut(1000);
+				$("#go_btn").fadeOut(1000);
+				
+				setTimeout(getFeedInfo, 1000);
+				$("#bodySec div").first().remove();
+				$("#sel").remove();
+				//$("#not_sel").remove();
+				$("#go_btn").remove();
+			}
+		}
+		
+		// Pull information from facebook feed
+		function getFeedInfo()
+		{
+			
+			$('#bodySec').append("<p class='load'> Loading " + selected_friends[curFriendIndex].userName + "...<br/></p>");
+			
+			$.ajax({ url: "https://graph.facebook.com/" + selected_friends[curFriendIndex].uid + "/feed?fields=likes,message&limit=" + DATA_LENGTH + "&access_token=" + token, dataType: "json" }).done(function(page) {
+				
+				selected_friends[curFriendIndex].attackPower = Math.round(calcLikesPerStatus(page) * 10000);
+				selected_friends[curFriendIndex].defensePower = Math.round(calcPostsPerHour(page) * 10000);
+				
+				selected_friends[curFriendIndex].profilePic = "https://graph.facebook.com/" + selected_friends[curFriendIndex].uid + "/picture?type=large";
+				
+				selected_friends[curFriendIndex].description = "Description unavailable.";
+				for(var i = 0; i < page.data.length; i++)
+				{
+					if(page.data[i].message !== undefined)
+					{
+						selected_friends[curFriendIndex].description = page.data[i].message;
+						break;
+					}
+				}
+				
+				var alpha = "abcdefghijklmnopqrstuvwxyz";
+				var firstLetterOfLastName = selected_friends[curFriendIndex].userName.split(" ")[selected_friends[curFriendIndex].userName.split(" ").length - 1].substring(0,1).toLowerCase();
+				var alphaInd = alpha.indexOf(firstLetterOfLastName);
+				var alphaRatio = alphaInd / alpha.length;
+				
+				if(alphaRatio < 0.33)
+					selected_friends[curFriendIndex].cardType = 0;
+				else if(alphaRatio < 0.66)
+					selected_friends[curFriendIndex].cardType = 1;
+				else
+					selected_friends[curFriendIndex].cardType = 2;
+					
+				
+				if(curFriendIndex < selected_friends.length - 1)
+				{
+					curFriendIndex++;
+					getFeedInfo();
+				} else {
+					// done loading friend information, render cards
+					$('.load').fadeOut(250);
+					renderCards();
+				}
+			});
+		}
+		
+		
+		function renderCards()
+		{	
+			console.log("Done loading, rendering cards");
+			
+			//$("#photo").show();
+			
+			for(var i = 0; i < selected_friends.length; i++)
+			{
+				var curFriend = selected_friends[i];
+				var card = new Card(
+					curFriend.userName,
+					curFriend.profilePic,
+					curFriend.description,
+					curFriend.attackPower,
+					curFriend.defensePower,
+					curFriend.cardType,
+					curFriend.uid
+				);
+				
+				card.render($('#card' + i));
+				
+				$('#card' + i).fadeIn(1000);
+			}
+			
+
+		}
+		
+		
+		// Calculate likes per status
+		function calcLikesPerStatus(page)
+		{
+			var totalLikes = 0;
+			for(var i = 0; i < page.data.length; i++)
+			{
+				if(page.data[i].likes !== undefined)
+					totalLikes += page.data[i].likes.count;
+			}
+			
+			return totalLikes / page.data.length;
+		}
+		
+		// Calculate posts per hour
+		function calcPostsPerHour(page)
+		{
+			var totalDiff = 0;
+			for(var i = 0; i < page.data.length - 1; i++)
+			{
+				var d1 = Date.parse(page.data[i].created_time.split("+")[0]);
+				var d2 = Date.parse(page.data[i+1].created_time.split("+")[0]);
+				var timeDiff = (d1 - d2) / (1000*60*60);
+				
+				totalDiff += timeDiff;
+			}
+			
+			return (page.data.length - 1) / totalDiff;
+		}
+	//make this the userid token
+	
+	/*	
+	function getHealth(){
+	//uses all the data in the interests vector to determine how interesting a friend is. This in turn determines friend health
+		userid=uid.toString();
+		
+		var url ="http://whitli.mansilla.com/?uid="+userid+"&key_id=1&schema=fb&format=json&api_key=64zc3ay5b9wefqfsje7mxu68";
+		var datastr= new Array();
+		var health=0;
+		
+		function successCallback(data) {
+			console.log(data);
+			datastr=data.body.key.split(";");
+			datanums=datastr.toString();
+			datanums2=datanums.substring(46,datanums.length-1);
+			datanums3=datanums2.split(",");
+			console.log(datastr);
+			console.log(datanums3);
+			var interestingness=0;
+			for(var i=0; i<datanums3.length; i++)
+			{
+				interestingness=interestingness+parseInt(datanums3[i]);
+			}
+			interestingness=interestingness*(100/9);
+			health=Math.round(interestingness);
+			console.log(health);
+		}
+
+		function errorCallback(data) {
+			alert('error');
+		}
+		
+		$.ajax({
+			url: url,
+			dataType: 'jsonp',
+			success: successCallback,
+			error: errorCallback
+		});
+		
+		return health;
+	}
+	
+	function getType(){
+	//uses all the data in the interests vector to determine how interesting a friend is. This in turn determines friend health
+		userid=uid.toString();
+		
+		var url ="http://whitli.mansilla.com/?uid="+userid+"&key_id=1&schema=fb&format=json&api_key=64zc3ay5b9wefqfsje7mxu68";
+		var datastr= new Array();
+		var type=0;
+		function successCallback(data) {
+			//var type=0;
+			
+			datastr=data.body.key.split(";");
+			datanums=datastr.toString();
+			
+			datanums2=datanums.substring(38,39);
+			if(datanums2<4)
+				type="grass";
+			if(datanums2>4 && datanums2<7)
+				type="water";
+			if(datanums2>7)
+				type="fire";
+			
+			console.log(type);
+			
+		}
+
+		function errorCallback(data) {
+			alert('error');
+		}
+		
+		$.ajax({
+			url: url,
+			dataType: 'jsonp',
+			success: successCallback,
+			error: errorCallback
+		});
+		return type;
+	}
+	*/
+	function Card(name, picture, description, attack, defense, type, userid) {
+	this.picture = picture;
+	this.name=name;
+	this.description = description;
+    this.attack = attack;
+	this.defense = defense;
+	this.type = type;
+	this.userid = userid;
+    this.render = function(element) {
+		// Draw the empty card
+        element.css("background-image", "url('images/card.jpg')");
+        var iconFile;
+		if(type == 0)
+			iconFile = "images/icon_fire.png";
+		else if(type == 1)
+			iconFile = "images/icon_water.png";
+		else if(type == 2)
+			iconFile = "images/icon_grass.png";
+		
+        var divs = $('<div id=\'nameDiv\'style = "width:275px; height:30px; margin-top:29px; margin-left:25px; font-family:Palatino Linotype;font-size: 16px;padding-top: 5px; padding-left:5px;"><b>' + name + '</b> <img src=\'' + iconFile + '\' style=\'float:right;width:32px; height:32px; margin-top:-5px;\'></img></div><div style = "width:245px; height:248px; margin-top:42px; margin-left:45px;"><a href = "http://www.facebook.com/' + userid + '" target="_blank"><img src=\'' + picture + '\'style=\'width:245px; height:248px;\'></img></a></div><div id=\'descript\'style = "width:275px; height:70px; margin-top:27px; margin-left:30px; font-family:Palatino Linotype;font-size: 11px;"><u> Description: </u><br/> <div style="width: 275px; height:47px; word-wrap:break-word; background:transparent; overflow:hidden; resize:none; border:none; font-size: 12px;">' + description + '</div></div><div id=\'attackAndDef\'style = "width:275px; height:14px; margin-top:1.5px; margin-left:25px; font-family:Palatino Linotype;font-size: 12px;"><div style = " width:30px;float:right;margin-right:-3px;">' + defense + '</div><div style = " width:30px;float:right;margin-right:40px;">' + attack + '</div></div>');
+		
+		element.append(divs);
+    };
+	}
+	</script>  
+  </head>
+
+  <body style = "height:100%;">
+  <div id = "fb-root"> </div>
+  <script>
+        window.fbAsyncInit = function() {
+          FB.init({
+            appId      : '158193740991199', // App ID
+            status     : true, // check login status
+            cookie     : true, // enable cookies to allow the server to access the session
+            xfbml      : true  // parse XFBML
+          });
+        };
+        // Load the SDK Asynchronously
+        (function(d){
+           var js, id = 'facebook-jssdk', ref = d.getElementsByTagName('script')[0];
+           if (d.getElementById(id)) {return;}
+           js = d.createElement('script'); js.id = id; js.async = true;
+           js.src = "//connect.facebook.net/en_US/all.js";
+           ref.parentNode.insertBefore(js, ref);
+         }(document));
+         //FB.api('/me', function(response) {
+         	//alert(response.name);
+         //});
+    </script>
+    
+    <div id = "container">
+    	<div id = "header">
+			<div id = "pic">
+				<img src = "logo.jpg" width = "1200px" height = "200px"> </img>
+			</div>
+		</div>
+		<div id = "bodySec">
+			<div id = "description">
+				<p>Our hack uses the stats from Facebook friends of your choosing and turns them into a combination of Yu-gi-oh and Pok&#233mon cards. </p>
+			</div>
+			<div id ="logIn">
+				<h2> Please log in with Facebook to enter the game </h2>
+				<!--<div style = "margin-left:50px;" class="fb-login-button" scope = "user_status" onlogin = "myFunction()">Login with Facebook</div>
+				-->
+				<button onclick = "fbLogin()">Log into Facebook</button>				
+			</div>
+			
+		</div>
+
+    </div> <!-- /container -->
+  </body>
+</html>

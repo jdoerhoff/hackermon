@@ -1,0 +1,46 @@
+#container {
+	min-width:1000px;
+	min-height:700px;
+	height:100%; 
+	width:100%; 
+	margin-left:25px;
+}
+#header {
+	background-color:#3b5998; 
+	height:220px; 
+	padding: 10px;
+}
+#pic {
+	float:left; 
+	padding:10px; 
+}
+#title {
+	float:left; 
+	margin-top:25px; 
+	height:150px; 
+	padding-left:50px; 
+	width:400px;
+	font-size:36px;
+}
+#bodySec {
+	margin-top:50px;
+	height:750px; 
+	padding: 10px;
+}
+#description {
+	height:700px; 
+	float: left; 
+	width:200px; 
+	padding-right: 10px; 
+	border-right:1px solid black;
+}
+#logIn {
+	float:left;
+	width:500px; 
+	margin-left: 50px;
+}
+
+select {
+    float: left;
+    width: 256px;
+}
